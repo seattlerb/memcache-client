@@ -1,0 +1,41 @@
+= 1.3.0
+
+* Apply patch #6507, add stats command.  Submitted by Tyler Kovacs.
+* Apply patch #6509, parallel implementation of #get_multi.  Submitted
+  by Tyler Kovacs.
+
+= 1.2.1
+
+* Fix bug #7048, MemCache#servers= referenced changed local variable.
+  Submitted by Justin Dossey.
+* Fix bug #7049, MemCache#initialize resets @buckets.  Submitted by
+  Justin Dossey.
+* Fix bug #6232, Make Cache::Get work with a block only when nil is
+  returned.  Submitted by Jon Evans.
+* Moved to the seattlerb project.
+
+= 1.2.0
+
+NOTE: This version will store keys in different places than previous
+versions!  Be prepared for some thrashing while memcached sorts itself
+out!
+
+* Fixed multithreaded operations, bug 5994 and 5989.
+  Thanks to Blaine Cook, Erik Hetzner, Elliot Smith, Dave Myron (and
+  possibly others I have forgotten).
+* Made memcached interoperable with other memcached libraries, bug
+  4509.  Thanks to anonymous.
+* Added get_multi to match Perl/etc APIs
+
+= 1.1.0
+
+* Added some tests
+* Sped up non-multithreaded and multithreaded operation
+* More Ruby-memcache compatibility
+* More RDoc
+* Switched to Hoe
+
+= 1.0.0
+
+Birthday!
+
