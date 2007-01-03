@@ -3,6 +3,10 @@
 * Apply patch #6507, add stats command.  Submitted by Tyler Kovacs.
 * Apply patch #6509, parallel implementation of #get_multi.  Submitted
   by Tyler Kovacs.
+* Validate keys.  Disallow spaces in keys or keys that are too long.
+* Add #incr and #decr.
+* Add raw argument to #set and #get to retrieve #incr and #decr
+  values.
 
 = 1.2.1
 

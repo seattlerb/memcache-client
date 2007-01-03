@@ -140,6 +140,54 @@ class TestMemCache < Test::Unit::TestCase
     end
   end
 
+  def test_decr
+    server = FakeServer.new
+    server.socket.data.write "5\r\n"
+    server.socket.data.rewind
+
+    @cache.servers = []
+    @cache.servers << server
+
+    value = @cache.decr 'key'
+
+    assert_equal "decr my_namespace:key 1\r\n",
+                 @cache.servers.first.socket.written.string
+
+    assert_equal 5, value
+  end
+
+  def test_decr_not_found
+    server = FakeServer.new
+    server.socket.data.write "NOT_FOUND\r\n"
+    server.socket.data.rewind
+
+    @cache.servers = []
+    @cache.servers << server
+
+    value = @cache.decr 'key'
+
+    assert_equal "decr my_namespace:key 1\r\n",
+                 @cache.servers.first.socket.written.string
+
+    assert_equal nil, value
+  end
+
+  def test_decr_space_padding
+    server = FakeServer.new
+    server.socket.data.write "5 \r\n"
+    server.socket.data.rewind
+
+    @cache.servers = []
+    @cache.servers << server
+
+    value = @cache.decr 'key'
+
+    assert_equal "decr my_namespace:key 1\r\n",
+                 @cache.servers.first.socket.written.string
+
+    assert_equal 5, value
+  end
+
   def test_get
     util_setup_fake_server
 
@@ -221,6 +269,25 @@ class TestMemCache < Test::Unit::TestCase
     assert_equal expected.sort, values.sort
   end
 
+  def test_get_raw
+    server = FakeServer.new
+    server.socket.data.write "VALUE my_namespace:key 0 10\r\n"
+    server.socket.data.write "0123456789\r\n"
+    server.socket.data.write "END\r\n"
+    server.socket.data.rewind
+
+    @cache.servers = []
+    @cache.servers << server
+
+
+    value = @cache.get 'key', true
+
+    assert_equal "get my_namespace:key\r\n",
+                 @cache.servers.first.socket.written.string
+
+    assert_equal '0123456789', value
+  end
+
   def test_get_server_for_key
     server = @cache.get_server_for_key 'key'
     assert_equal 'localhost', server.host
@@ -249,6 +316,70 @@ class TestMemCache < Test::Unit::TestCase
     assert_equal 'No servers available', e.message
   end
 
+  def test_get_server_for_key_spaces
+    e = assert_raise ArgumentError do
+      @cache.get_server_for_key 'space key'
+    end
+    assert_equal 'illegal character in key "space key"', e.message
+  end
+
+  def test_get_server_for_key_length
+    @cache.get_server_for_key 'x' * 250
+    long_key = 'x' * 251
+    e = assert_raise ArgumentError do
+      @cache.get_server_for_key long_key
+    end
+    assert_equal "key too long #{long_key.inspect}", e.message
+  end
+
+  def test_incr
+    server = FakeServer.new
+    server.socket.data.write "5\r\n"
+    server.socket.data.rewind
+
+    @cache.servers = []
+    @cache.servers << server
+
+    value = @cache.incr 'key'
+
+    assert_equal "incr my_namespace:key 1\r\n",
+                 @cache.servers.first.socket.written.string
+
+    assert_equal 5, value
+  end
+
+  def test_incr_not_found
+    server = FakeServer.new
+    server.socket.data.write "NOT_FOUND\r\n"
+    server.socket.data.rewind
+
+    @cache.servers = []
+    @cache.servers << server
+
+    value = @cache.incr 'key'
+
+    assert_equal "incr my_namespace:key 1\r\n",
+                 @cache.servers.first.socket.written.string
+
+    assert_equal nil, value
+  end
+
+  def test_incr_space_padding
+    server = FakeServer.new
+    server.socket.data.write "5 \r\n"
+    server.socket.data.rewind
+
+    @cache.servers = []
+    @cache.servers << server
+
+    value = @cache.incr 'key'
+
+    assert_equal "incr my_namespace:key 1\r\n",
+                 @cache.servers.first.socket.written.string
+
+    assert_equal 5, value
+  end
+
   def test_make_cache_key
     assert_equal 'my_namespace:key', @cache.make_cache_key('key')
     @cache.namespace = nil
@@ -261,6 +392,55 @@ class TestMemCache < Test::Unit::TestCase
     end
 
     assert_equal 'cannot convert Object into MemCache::Server', e.message
+  end
+
+  def test_set
+    server = FakeServer.new
+    server.socket.data.write "STORED\r\n"
+    server.socket.data.rewind
+    @cache.servers = []
+    @cache.servers << server
+
+    @cache.set 'key', 'value'
+
+    expected = "set my_namespace:key 0 0 9\r\n\004\b\"\nvalue\r\n"
+    assert_equal expected, server.socket.written.string
+  end
+
+  def test_set_expiry
+    server = FakeServer.new
+    server.socket.data.write "STORED\r\n"
+    server.socket.data.rewind
+    @cache.servers = []
+    @cache.servers << server
+
+    @cache.set 'key', 'value', 5
+
+    expected = "set my_namespace:key 0 5 9\r\n\004\b\"\nvalue\r\n"
+    assert_equal expected, server.socket.written.string
+  end
+
+  def test_set_raw
+    server = FakeServer.new
+    server.socket.data.write "STORED\r\n"
+    server.socket.data.rewind
+    @cache.servers = []
+    @cache.servers << server
+
+    @cache.set 'key', 'value', 0, true
+
+    expected = "set my_namespace:key 0 0 5\r\nvalue\r\n"
+    assert_equal expected, server.socket.written.string
+  end
+
+  def test_set_readonly
+    cache = MemCache.new :readonly => true
+
+    e = assert_raise MemCache::MemCacheError do
+      cache.set 'key', 'value'
+    end
+
+    assert_equal 'Update of readonly cache', e.message
   end
 
   def test_stats

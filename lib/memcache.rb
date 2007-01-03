@@ -34,14 +34,15 @@ end
 # A Ruby client library for memcached.
 #
 # This is intended to provide access to basic memcached functionality.  It
-# does not attempt to be complete implementation of the entire API.
+# does not attempt to be complete implementation of the entire API, but it is
+# approaching a complete implementation.
 
 class MemCache
 
   ##
   # The version of MemCache you are using.
 
-  VERSION = '1.2.1'
+  VERSION = '1.3.0'
 
   ##
   # Default options for the cache object.
@@ -172,14 +173,28 @@ class MemCache
   end
 
   ##
-  # Retrieves +key+ from memcache.
+  # Deceremets the value for +key+ by +ammount+ and returns the new value.
+  # +key+ must already exist.  If +key+ is not an integer, it is assumed to be
+  # 0.  +key+ can not be decremented below 0.
 
-  def get(key)
-    raise MemCacheError, 'No active servers' unless active?
-    cache_key = make_cache_key key
-    server = get_server_for_key cache_key
+  def decr(key, ammount = 1)
+    server, cache_key = request_setup key
 
-    raise MemCacheError, 'No connection to server' if server.socket.nil?
+    if @multithread then
+      threadsafe_cache_decr server, cache_key, ammount
+    else
+      cache_decr server, cache_key, ammount
+    end
+  rescue ArgumentError, TypeError, SystemCallError, IOError => err
+    handle_error server, err
+  end
+
+  ##
+  # Retrieves +key+ from memcache.  If +raw+ is false, the value will be
+  # unmarshalled.
+
+  def get(key, raw = false)
+    server, cache_key = request_setup key
 
     value = if @multithread then
               threadsafe_cache_get server, cache_key
@@ -189,13 +204,11 @@ class MemCache
 
     return nil if value.nil?
 
-    # Return the unmarshaled value.
-    return Marshal.load(value)
+    value = Marshal.load value unless raw
+
+    return value
   rescue ArgumentError, TypeError, SystemCallError, IOError => err
-    server.close
-    new_err = MemCacheError.new err.message
-    new_err.set_backtrace err.backtrace
-    raise new_err
+    handle_error server, err
   end
 
   ##
@@ -210,106 +223,83 @@ class MemCache
   #
   # Returns a hash of values.
   #
-  #   >> CACHE["a"] = 1
-  #   => 1
-  #   >> CACHE["b"] = 2
-  #   => 2
-  #   >> CACHE.get_multi(["a","b"])
-  #   => {"a"=>1, "b"=>2}
-  #
-  # Here's a benchmark showing the speedup:
-  #
-  #   CACHE["a"] = 1
-  #   CACHE["b"] = 2
-  #   CACHE["c"] = 3
-  #   CACHE["d"] = 4
-  #   keys = ["a","b","c","d","e"]
-  #   Benchmark.bm do |x|
-  #     x.report { for i in 1..1000; keys.each{|k| CACHE.get(k);} end }
-  #     x.report { for i in 1..1000; CACHE.get_multi(keys); end }
-  #   end
-  #
-  # returns:
-  #
-  #       user     system      total        real
-  #   0.180000   0.130000   0.310000 (  0.459418)
-  #   0.200000   0.030000   0.230000 (  0.269632)
-  #--
-  # There's a fair amount of non-DRY between get_multi and get (and
-  # threadsafe_cache_get/multi_threadsafe_cache_get and
-  # cache_get/multi_cache_get for that matter) but I think it's worth it
-  # since the extra overhead to handle multiple return values is unneeded
-  # for a single-key get (which is by far the most common case).
+  #   cache["a"] = 1
+  #   cache["b"] = 2
+  #   cache.get_multi "a", "b" # => { "a" => 1, "b" => 2 }
 
   def get_multi(*keys)
     raise MemCacheError, 'No active servers' unless active?
 
     keys.flatten!
     key_count = keys.length
-    cache_keys_keys = {}
-    servers_cache_keys = Hash.new { |h,k| h[k] = [] }
+    cache_keys = {}
+    server_keys = Hash.new { |h,k| h[k] = [] }
 
-    # retrieve the server to key mapping so that we know which servers to
-    # send the requests to (different keys can come from different servers)
+    # map keys to servers
     keys.each do |key|
-      cache_key = make_cache_key key
-      cache_keys_keys[cache_key] = key
-      server = get_server_for_key cache_key
-      raise MemCacheError, 'No connection to server' if server.socket.nil?
-      servers_cache_keys[server] << cache_key
+      server, cache_key = request_setup key
+      cache_keys[cache_key] = key
+      server_keys[server] << cache_key
     end
 
-    values = {}
+    results = {}
 
-    servers_cache_keys.keys.each do |server|
-      values.merge!(if @multithread then
-        multi_threadsafe_cache_get server, servers_cache_keys[server].join(" ")
-      else
-        multi_cache_get server, servers_cache_keys[server].join(" ")
-      end)
+    server_keys.each do |server, keys|
+      keys = keys.join ' '
+      values = if @multithread then
+                 threadsafe_cache_get_multi server, keys
+               else
+                 cache_get_multi server, keys
+               end
+      values.each do |key, value|
+        results[cache_keys[key]] = Marshal.load value
+      end
     end
 
-    # Return the unmarshaled value.
-    return_values = {}
-    values.each_pair do |k,v|
-      return_values[cache_keys_keys[k]] = Marshal.load v
-    end
-
-    return return_values
+    return results
   rescue ArgumentError, TypeError, SystemCallError, IOError => err
-    server.close
-    new_err = MemCacheError.new err.message
-    new_err.set_backtrace err.backtrace
-    raise new_err
+    handle_error server, err
+  end
+
+  ##
+  # Increments the value for +key+ by +ammount+ and retruns the new value..
+  # +key+ must already exist.  If +key+ is not an integer, it is assumed to be
+  # 0.
+
+  def incr(key, ammount = 1)
+    server, cache_key = request_setup key
+
+    if @multithread then
+      threadsafe_cache_incr server, cache_key, ammount
+    else
+      cache_incr server, cache_key, ammount
+    end
+  rescue ArgumentError, TypeError, SystemCallError, IOError => err
+    handle_error server, err
   end
 
   ##
   # Add +key+ to the cache with value +value+ that expires in +expiry+
-  # seconds.
+  # seconds.  If +raw+ is true, +value+ will not be Marshalled.
 
-  def set(key, value, expiry = 0)
-    @mutex.lock if @multithread
-
-    raise MemCacheError, "No active servers" unless self.active?
+  def set(key, value, expiry = 0, raw = false)
     raise MemCacheError, "Update of readonly cache" if @readonly
-    cache_key = make_cache_key(key)
-    server = get_server_for_key(cache_key)
+    server, cache_key = request_setup key
+    socket = server.socket
 
-    sock = server.socket
-    raise MemCacheError, "No connection to server" if sock.nil?
-
-    marshaled_value = Marshal.dump value
-    command = "set #{cache_key} 0 #{expiry} #{marshaled_value.size}\r\n#{marshaled_value}\r\n"
+    value = Marshal.dump value unless raw
+    command = "set #{cache_key} 0 #{expiry} #{value.size}\r\n#{value}\r\n"
 
     begin
-      sock.write command
-      sock.gets
+      @mutex.lock if @multithread
+      socket.write command
+      socket.gets
     rescue SystemCallError, IOError => err
       server.close
       raise MemCacheError, err.message
+    ensure
+      @mutex.unlock if @multithread
     end
-  ensure
-    @mutex.unlock if @multithread
   end
 
   ##
@@ -436,6 +426,9 @@ class MemCache
   # Pick a server to handle the request based on a hash of the key.
 
   def get_server_for_key(key)
+    raise ArgumentError, "illegal character in key #{key.inspect}" if
+      key =~ /\s/
+    raise ArgumentError, "key too long #{key.inspect}" if key.length > 250
     raise MemCacheError, "No servers available" if @servers.empty?
     return @servers.first if @servers.length == 1
 
@@ -459,6 +452,18 @@ class MemCache
   end
 
   ##
+  # Performs a raw decr for +cache_key+ from +server+.  Returns nil if not
+  # found.
+
+  def cache_decr(server, cache_key, ammount)
+    socket = server.socket
+    socket.write "decr #{cache_key} #{ammount}\r\n"
+    text = socket.gets
+    return nil if text == "NOT_FOUND\r\n"
+    return text.to_i
+  end
+
+  ##
   # Fetches the raw data for +cache_key+ from +server+.  Returns nil on cache
   # miss.
 
@@ -475,24 +480,13 @@ class MemCache
     return value
   end
 
-  def threadsafe_cache_get(socket, cache_key) # :nodoc:
-    @mutex.lock
-    cache_get socket, cache_key
-  ensure
-    @mutex.unlock
-  end
+  ##
+  # Fetches +cache_keys+ from +server+ using a multi-get.
 
-  def multi_threadsafe_cache_get(socket, cache_key) # :nodoc:
-    @mutex.lock
-    multi_cache_get(socket, cache_key)
-  ensure
-    @mutex.unlock
-  end
-
-  def multi_cache_get(server, cache_key)
+  def cache_get_multi(server, cache_keys)
     values = {}
     socket = server.socket
-    socket.write "get #{cache_key}\r\n"
+    socket.write "get #{cache_keys}\r\n"
 
     while keyline = socket.gets
       break if (keyline.strip rescue "END") == "END"
@@ -503,6 +497,61 @@ class MemCache
     end
 
     return values
+  end
+
+  ##
+  # Performs a raw incr for +cache_key+ from +server+.  Returns nil if not
+  # found.
+
+  def cache_incr(server, cache_key, ammount)
+    socket = server.socket
+    socket.write "incr #{cache_key} #{ammount}\r\n"
+    text = socket.gets
+    return nil if text == "NOT_FOUND\r\n"
+    return text.to_i
+  end
+
+  def handle_error(server, error)
+    server.close
+    new_error = MemCacheError.new error.message
+    new_error.set_backtrace error.backtrace
+    raise new_error
+  end
+
+  def request_setup(key)
+    raise MemCacheError, 'No active servers' unless active?
+    cache_key = make_cache_key key
+    server = get_server_for_key cache_key
+    raise MemCacheError, 'No connection to server' if server.socket.nil?
+    return server, cache_key
+  end
+
+  def threadsafe_cache_decr(server, cache_key, ammount) # :nodoc:
+    @mutex.lock
+    cache_decr server, cache_key, ammount
+  ensure
+    @mutex.unlock
+  end
+
+  def threadsafe_cache_get(server, cache_key) # :nodoc:
+    @mutex.lock
+    cache_get server, cache_key
+  ensure
+    @mutex.unlock
+  end
+
+  def threadsafe_cache_get_multi(socket, cache_key) # :nodoc:
+    @mutex.lock
+    cache_get_multi socket, cache_key
+  ensure
+    @mutex.unlock
+  end
+
+  def threadsafe_cache_incr(server, cache_key, ammount) # :nodoc:
+    @mutex.lock
+    cache_incr server, cache_key, ammount
+  ensure
+    @mutex.unlock
   end
 
   ##
