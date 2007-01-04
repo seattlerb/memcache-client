@@ -185,7 +185,7 @@ class MemCache
     else
       cache_decr server, cache_key, ammount
     end
-  rescue ArgumentError, TypeError, SystemCallError, IOError => err
+  rescue TypeError, SystemCallError, IOError => err
     handle_error server, err
   end
 
@@ -207,7 +207,7 @@ class MemCache
     value = Marshal.load value unless raw
 
     return value
-  rescue ArgumentError, TypeError, SystemCallError, IOError => err
+  rescue TypeError, SystemCallError, IOError => err
     handle_error server, err
   end
 
@@ -257,7 +257,7 @@ class MemCache
     end
 
     return results
-  rescue ArgumentError, TypeError, SystemCallError, IOError => err
+  rescue TypeError, SystemCallError, IOError => err
     handle_error server, err
   end
 
@@ -274,7 +274,7 @@ class MemCache
     else
       cache_incr server, cache_key, ammount
     end
-  rescue ArgumentError, TypeError, SystemCallError, IOError => err
+  rescue TypeError, SystemCallError, IOError => err
     handle_error server, err
   end
 
@@ -512,7 +512,7 @@ class MemCache
   end
 
   def handle_error(server, error)
-    server.close
+    server.close if server
     new_error = MemCacheError.new error.message
     new_error.set_backtrace error.backtrace
     raise new_error

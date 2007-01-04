@@ -199,6 +199,14 @@ class TestMemCache < Test::Unit::TestCase
     assert_equal '0123456789', value
   end
 
+  def test_get_bad_key
+    util_setup_fake_server
+    assert_raise ArgumentError do @cache.get 'k y' end
+
+    util_setup_fake_server
+    assert_raise ArgumentError do @cache.get 'k' * 250 end
+  end
+
   def test_get_cache_get_IOError
     socket = Object.new
     def socket.write(arg) raise IOError, 'some io error'; end
