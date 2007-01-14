@@ -123,8 +123,8 @@ class MemCache
   # Return a string representation of the cache object.
 
   def inspect
-    sprintf("<MemCache: %s servers, %s buckets, ns: %p, ro: %p>",
-            @servers.length, @buckets.length, @namespace, @readonly)
+    "<MemCache: %d servers, %d buckets, ns: %p, ro: %p>" %
+      [@servers.length, @buckets.length, @namespace, @readonly]
   end
 
   ##
@@ -185,7 +185,7 @@ class MemCache
     else
       cache_decr server, cache_key, ammount
     end
-  rescue TypeError, SystemCallError, IOError => err
+  rescue TypeError, SocketError, SystemCallError, IOError => err
     handle_error server, err
   end
 
@@ -207,7 +207,7 @@ class MemCache
     value = Marshal.load value unless raw
 
     return value
-  rescue TypeError, SystemCallError, IOError => err
+  rescue TypeError, SocketError, SystemCallError, IOError => err
     handle_error server, err
   end
 
@@ -257,7 +257,7 @@ class MemCache
     end
 
     return results
-  rescue TypeError, SystemCallError, IOError => err
+  rescue TypeError, SocketError, SystemCallError, IOError => err
     handle_error server, err
   end
 
@@ -274,7 +274,7 @@ class MemCache
     else
       cache_incr server, cache_key, ammount
     end
-  rescue TypeError, SystemCallError, IOError => err
+  rescue TypeError, SocketError, SystemCallError, IOError => err
     handle_error server, err
   end
 
@@ -294,7 +294,7 @@ class MemCache
       @mutex.lock if @multithread
       socket.write command
       socket.gets
-    rescue SystemCallError, IOError => err
+    rescue SocketError, SystemCallError, IOError => err
       server.close
       raise MemCacheError, err.message
     ensure
@@ -318,7 +318,7 @@ class MemCache
     begin
       sock.write "delete #{cache_key} #{expiry}\r\n"
       sock.gets
-    rescue SystemCallError, IOError => err
+    rescue SocketError, SystemCallError, IOError => err
       server.close
       raise MemCacheError, err.message
     end
@@ -380,12 +380,12 @@ class MemCache
         sock.write "stats\r\n"
         stats = {}
         while line = sock.gets
-          break if (line.strip rescue "END") == "END"
+          break if line == "END\r\n"
           line =~ /^STAT ([\w]+) ([\d.]+)/
           stats[$1] = $2
         end
         server_stats["#{server.host}:#{server.port}"] = stats.clone
-      rescue SystemCallError, IOError => err
+      rescue SocketError, SystemCallError, IOError => err
         server.close
         raise MemCacheError, err.message
       end
@@ -393,7 +393,6 @@ class MemCache
 
     server_stats
   end
-
 
   ##
   # Shortcut to get a value from the cache.
@@ -465,15 +464,18 @@ class MemCache
 
   ##
   # Fetches the raw data for +cache_key+ from +server+.  Returns nil on cache
-  # miss.
+  # miss
 
   def cache_get(server, cache_key)
     socket = server.socket
     socket.write "get #{cache_key}\r\n"
-    text = socket.gets # "VALUE <key> <flags> <bytes>\r\n"
-    return nil if text == "END\r\n"
+    keyline = socket.gets # "VALUE <key> <flags> <bytes>\r\n"
+    return nil if keyline == "END\r\n"
 
-    text =~ /(\d+)\r/
+    unless keyline =~ /(\d+)\r/ then
+      server.close
+      raise MemCacheError, "unexpected response #{keyline.inspect}"
+    end
     value = socket.read $1.to_i
     socket.read 2 # "\r\n"
     socket.gets   # "END\r\n"
@@ -489,8 +491,11 @@ class MemCache
     socket.write "get #{cache_keys}\r\n"
 
     while keyline = socket.gets
-      break if (keyline.strip rescue "END") == "END"
-      keyline =~ /^VALUE (.+) (.+) (.+)/
+      break if keyline == "END\r\n"
+      unless keyline =~ /^VALUE (.+) (.+) (.+)/ then
+        server.close
+        raise MemCacheError, "unexpected response #{keyline.inspect}"
+      end
       key, data_length = $1, $3
       values[$1] = socket.read data_length.to_i
       socket.read(2) # "\r\n"
@@ -622,8 +627,7 @@ class MemCache
     # Return a string representation of the server object.
 
     def inspect
-      sprintf("<MemCache::Server: %s:%d [%d] (%s)>",
-              @host, @port, @weight, @status)
+      "<MemCache::Server: %s:%d [%d] (%s)>" % [@host, @port, @weight, @status]
     end
 
     ##
@@ -633,7 +637,7 @@ class MemCache
     # been exceeded.
 
     def alive?
-      !self.socket.nil?
+      !!socket
     end
 
     ##

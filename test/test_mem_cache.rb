@@ -43,9 +43,15 @@ class FakeServer
 
   def initialize(socket = nil)
     @socket = socket || FakeSocket.new
+    @closed = false
   end
 
   def close
+    @closed = true
+  end
+
+  def alive?
+    !@closed
   end
 
 end
@@ -66,6 +72,26 @@ class TestMemCache < Test::Unit::TestCase
                  server.socket.written.string
   end
 
+  def test_cache_get_bad_state
+    server = FakeServer.new
+    server.socket.data.write "bogus response\r\n"
+    server.socket.data.rewind
+
+    @cache.servers = []
+    @cache.servers << server
+
+    e = assert_raise MemCache::MemCacheError do
+      @cache.cache_get(server, 'my_namespace:key')
+    end
+
+    assert_equal "unexpected response \"bogus response\\r\\n\"", e.message
+
+    deny server.alive?
+
+    assert_equal "get my_namespace:key\r\n",
+                 server.socket.written.string
+  end
+
   def test_cache_get_miss
     socket = FakeSocket.new
     socket.data.write "END\r\n"
@@ -76,6 +102,26 @@ class TestMemCache < Test::Unit::TestCase
 
     assert_equal "get my_namespace:key\r\n",
                  socket.written.string
+  end
+
+  def test_cache_get_multi_bad_state
+    server = FakeServer.new
+    server.socket.data.write "bogus response\r\n"
+    server.socket.data.rewind
+
+    @cache.servers = []
+    @cache.servers << server
+
+    e = assert_raise MemCache::MemCacheError do
+      @cache.cache_get_multi(server, ['my_namespace:key'])
+    end
+
+    assert_equal "unexpected response \"bogus response\\r\\n\"", e.message
+
+    deny server.alive?
+
+    assert_equal "get my_namespace:key\r\n",
+                 server.socket.written.string
   end
 
   def test_crc32_ITU_T
@@ -491,7 +537,7 @@ class TestMemCache < Test::Unit::TestCase
       cache.set "test", "test value"
     end
   end
- 
+
   def util_setup_fake_server
     server = FakeServer.new
     server.socket.data.write "VALUE my_namespace:key 0 14\r\n"
