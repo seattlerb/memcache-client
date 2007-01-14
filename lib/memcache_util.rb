@@ -14,16 +14,21 @@ module Cache
 
   def self.get(key, expiry = 0)
     start_time = Time.now
-    result = CACHE.get key
+    value = CACHE.get key
     elapsed = Time.now - start_time
     ActiveRecord::Base.logger.debug('MemCache Get (%0.6f)  %s' % [elapsed, key])
-    if result.nil? and block_given? then
+    if value.nil? and block_given? then
       value = yield
       put key, value, expiry
     end
-    return result
+    result
   rescue MemCache::MemCacheError => err
     ActiveRecord::Base.logger.debug "MemCache Error: #{err.message}"
+    if block_given? then
+      value = yield
+      put key, value, expiry
+    end
+    value
   end
 
   ##
@@ -35,8 +40,10 @@ module Cache
     CACHE.set key, value, expiry
     elapsed = Time.now - start_time
     ActiveRecord::Base.logger.debug('MemCache Set (%0.6f)  %s' % [elapsed, key])
+    value
   rescue MemCache::MemCacheError => err
     ActiveRecord::Base.logger.debug "MemCache Error: #{err.message}"
+    nil
   end
 
   ##
@@ -48,8 +55,10 @@ module Cache
     elapsed = Time.now - start_time
     ActiveRecord::Base.logger.debug('MemCache Delete (%0.6f)  %s' %
                                     [elapsed, key])
+    nil
   rescue MemCache::MemCacheError => err
     ActiveRecord::Base.logger.debug "MemCache Error: #{err.message}"
+    nil
   end
 
   ##
@@ -58,6 +67,7 @@ module Cache
   def self.reset
     CACHE.reset
     ActiveRecord::Base.logger.debug 'MemCache Connections Reset'
+    nil
   end
 
 end
