@@ -8,6 +8,7 @@
 * Add #incr and #decr.
 * Add raw argument to #set and #get to retrieve #incr and #decr
   values.
+* Also put on MemCacheError when using Cache::get with block.
 
 = 1.2.1
 
