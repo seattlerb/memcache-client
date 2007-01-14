@@ -21,7 +21,7 @@ module Cache
       value = yield
       put key, value, expiry
     end
-    result
+    value
   rescue MemCache::MemCacheError => err
     ActiveRecord::Base.logger.debug "MemCache Error: #{err.message}"
     if block_given? then
