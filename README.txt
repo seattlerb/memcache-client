@@ -4,9 +4,13 @@ Rubyforge Project:
 
 http://rubyforge.org/projects/rctools/
 
+File bugs:
+
+http://rubyforge.org/tracker/?func=add&group_id=1513&atid=5921
+
 == About
 
-memcache-client is a fast memcached client.
+memcache-client is a client for Danga Interactive's memcached.
 
 == Installing memcache-client
 
@@ -30,14 +34,14 @@ See MemCache.new for details.
 === Using memcache-client with Rails
 
 Rails will automatically load the memcache-client gem, but you may
-need to uninstall Ruby-memcache, I don't know which one it will pick
-by default.
+need to uninstall Ruby-memcache, I don't know which one will get
+picked by default.
 
 Add your environment-specific caches to config/environment/*.  If you run both
-development and production on the same machine be sure to use different
-namespaces.  Be careful when running tests using memcache, you may get strange
-results.  It will be less of a headache to simply use a readonly memcache when
-testing.
+development and production on the same memcached server sets, be sure
+to use different namespaces.  Be careful when running tests using
+memcache, you may get strange results.  It will be less of a headache
+to simply use a readonly memcache when testing.
 
 memcache-client also comes with a wrapper called Cache in memcache_util.rb for
 use with Rails.  To use it be sure to assign your memcache connection to

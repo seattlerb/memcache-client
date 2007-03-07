@@ -32,7 +32,7 @@ module Cache
   end
 
   ##
-  # Places +value+ in the cache at +key+, with an optional +expiry+ time in
+  # Sets +value+ in the cache at +key+, with an optional +expiry+ time in
   # seconds.
 
   def self.put(key, value, expiry = 0)

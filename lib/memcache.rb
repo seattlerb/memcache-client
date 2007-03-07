@@ -83,12 +83,14 @@ class MemCache
   ##
   # Accepts a list of +servers+ and a list of +opts+.  +servers+ may be
   # omitted.  See +servers=+ for acceptable server list arguments.
-  # 
+  #
   # Valid options for +opts+ are:
   #
   #   [:namespace]   Prepends this value to all keys added or retrieved.
   #   [:readonly]    Raises an exeception on cache writes when true.
   #   [:multithread] Wraps cache access in a Mutex for thread safety.
+  #
+  # Other options are ignored.
 
   def initialize(*args)
     servers = []
@@ -120,7 +122,7 @@ class MemCache
   end
 
   ##
-  # Return a string representation of the cache object.
+  # Returns a string representation of the cache object.
 
   def inspect
     "<MemCache: %d servers, %d buckets, ns: %p, ro: %p>" %
@@ -135,7 +137,7 @@ class MemCache
   end
 
   ##
-  # Returns whether the cache was created read only.
+  # Returns whether or not the cache object was created read only.
 
   def readonly?
     @readonly
@@ -173,17 +175,17 @@ class MemCache
   end
 
   ##
-  # Deceremets the value for +key+ by +ammount+ and returns the new value.
+  # Deceremets the value for +key+ by +amount+ and returns the new value.
   # +key+ must already exist.  If +key+ is not an integer, it is assumed to be
   # 0.  +key+ can not be decremented below 0.
 
-  def decr(key, ammount = 1)
+  def decr(key, amount = 1)
     server, cache_key = request_setup key
 
     if @multithread then
-      threadsafe_cache_decr server, cache_key, ammount
+      threadsafe_cache_decr server, cache_key, amount
     else
-      cache_decr server, cache_key, ammount
+      cache_decr server, cache_key, amount
     end
   rescue TypeError, SocketError, SystemCallError, IOError => err
     handle_error server, err
@@ -262,17 +264,17 @@ class MemCache
   end
 
   ##
-  # Increments the value for +key+ by +ammount+ and retruns the new value..
+  # Increments the value for +key+ by +amount+ and retruns the new value.
   # +key+ must already exist.  If +key+ is not an integer, it is assumed to be
   # 0.
 
-  def incr(key, ammount = 1)
+  def incr(key, amount = 1)
     server, cache_key = request_setup key
 
     if @multithread then
-      threadsafe_cache_incr server, cache_key, ammount
+      threadsafe_cache_incr server, cache_key, amount
     else
-      cache_incr server, cache_key, ammount
+      cache_incr server, cache_key, amount
     end
   rescue TypeError, SocketError, SystemCallError, IOError => err
     handle_error server, err
@@ -454,9 +456,9 @@ class MemCache
   # Performs a raw decr for +cache_key+ from +server+.  Returns nil if not
   # found.
 
-  def cache_decr(server, cache_key, ammount)
+  def cache_decr(server, cache_key, amount)
     socket = server.socket
-    socket.write "decr #{cache_key} #{ammount}\r\n"
+    socket.write "decr #{cache_key} #{amount}\r\n"
     text = socket.gets
     return nil if text == "NOT_FOUND\r\n"
     return text.to_i
@@ -464,7 +466,7 @@ class MemCache
 
   ##
   # Fetches the raw data for +cache_key+ from +server+.  Returns nil on cache
-  # miss
+  # miss.
 
   def cache_get(server, cache_key)
     socket = server.socket
@@ -508,13 +510,16 @@ class MemCache
   # Performs a raw incr for +cache_key+ from +server+.  Returns nil if not
   # found.
 
-  def cache_incr(server, cache_key, ammount)
+  def cache_incr(server, cache_key, amount)
     socket = server.socket
-    socket.write "incr #{cache_key} #{ammount}\r\n"
+    socket.write "incr #{cache_key} #{amount}\r\n"
     text = socket.gets
     return nil if text == "NOT_FOUND\r\n"
     return text.to_i
   end
+
+  ##
+  # Handles +error+ from +server+.
 
   def handle_error(server, error)
     server.close if server
@@ -522,6 +527,10 @@ class MemCache
     new_error.set_backtrace error.backtrace
     raise new_error
   end
+
+  ##
+  # Performs setup for making a request with +key+ from memcached.  Returns
+  # the server to fetch the key from and the complete key to use.
 
   def request_setup(key)
     raise MemCacheError, 'No active servers' unless active?
@@ -531,9 +540,9 @@ class MemCache
     return server, cache_key
   end
 
-  def threadsafe_cache_decr(server, cache_key, ammount) # :nodoc:
+  def threadsafe_cache_decr(server, cache_key, amount) # :nodoc:
     @mutex.lock
-    cache_decr server, cache_key, ammount
+    cache_decr server, cache_key, amount
   ensure
     @mutex.unlock
   end
@@ -552,9 +561,9 @@ class MemCache
     @mutex.unlock
   end
 
-  def threadsafe_cache_incr(server, cache_key, ammount) # :nodoc:
+  def threadsafe_cache_incr(server, cache_key, amount) # :nodoc:
     @mutex.lock
-    cache_incr server, cache_key, ammount
+    cache_incr server, cache_key, amount
   ensure
     @mutex.unlock
   end
