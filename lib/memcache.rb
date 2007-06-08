@@ -1,4 +1,4 @@
-$TESTING = defined? $TESTING && $TESTING
+$TESTING = defined?($TESTING) && $TESTING
 
 require 'socket'
 require 'thread'
