@@ -461,6 +461,19 @@ class TestMemCache < Test::Unit::TestCase
     assert_equal expected, server.socket.written.string
   end
 
+  def test_set
+    server = FakeServer.new
+    server.socket.data.write "STORED\r\n"
+    server.socket.data.rewind
+    @cache.servers = []
+    @cache.servers << server
+
+    @cache.set 'key', 'value'
+
+    expected = "set my_namespace:key 0 0 9\r\n\004\b\"\nvalue\r\n"
+    assert_equal expected, server.socket.written.string
+  end
+
   def test_set_expiry
     server = FakeServer.new
     server.socket.data.write "STORED\r\n"
@@ -495,6 +508,20 @@ class TestMemCache < Test::Unit::TestCase
     end
 
     assert_equal 'Update of readonly cache', e.message
+  end
+
+  def test_set_too_big
+    server = FakeServer.new
+    server.socket.data.write "SERVER_ERROR object too large for cache\r\n"
+    server.socket.data.rewind
+    @cache.servers = []
+    @cache.servers << server
+
+    e = assert_raise MemCache::MemCacheError do
+      @cache.set 'key', 'v'
+    end
+
+    assert_equal 'object too large for cache', e.message
   end
 
   def test_stats

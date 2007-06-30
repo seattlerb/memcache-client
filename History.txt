@@ -1,3 +1,8 @@
+= 1.3.1
+
+* Fix bug #10371, #set does not check response for server errors.
+  Submitted by Ben VandenBos.
+
 = 1.3.0
 
 * Apply patch #6507, add stats command.  Submitted by Tyler Kovacs.

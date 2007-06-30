@@ -42,7 +42,7 @@ class MemCache
   ##
   # The version of MemCache you are using.
 
-  VERSION = '1.3.0'
+  VERSION = '1.3.1'
 
   ##
   # Default options for the cache object.
@@ -295,7 +295,8 @@ class MemCache
     begin
       @mutex.lock if @multithread
       socket.write command
-      socket.gets
+      result = socket.gets
+      raise MemCacheError, $1.strip if result =~ /^SERVER_ERROR (.*)/
     rescue SocketError, SystemCallError, IOError => err
       server.close
       raise MemCacheError, err.message
