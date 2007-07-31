@@ -2,11 +2,15 @@
 
 Rubyforge Project:
 
-http://rubyforge.org/projects/rctools/
+http://rubyforge.org/projects/seattlerb
 
 File bugs:
 
 http://rubyforge.org/tracker/?func=add&group_id=1513&atid=5921
+
+Documentation:
+
+http://seattlerb.org/memcache-client
 
 == About
 
