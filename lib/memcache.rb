@@ -42,7 +42,7 @@ class MemCache
   ##
   # The version of MemCache you are using.
 
-  VERSION = '1.3.1'
+  VERSION = '1.4.0'
 
   ##
   # Default options for the cache object.
@@ -509,6 +509,12 @@ class MemCache
     socket = server.socket
     socket.write "get #{cache_key}\r\n"
     keyline = socket.gets # "VALUE <key> <flags> <bytes>\r\n"
+
+    if keyline.nil? then
+      server.close
+      raise MemCacheError, "lost connection to #{server.host}:#{server.port}"
+    end
+
     return nil if keyline == "END\r\n"
 
     unless keyline =~ /(\d+)\r/ then
@@ -529,18 +535,21 @@ class MemCache
     socket = server.socket
     socket.write "get #{cache_keys}\r\n"
 
-    while keyline = socket.gets
-      break if keyline == "END\r\n"
+    while keyline = socket.gets do
+      return values if keyline == "END\r\n"
+
       unless keyline =~ /^VALUE (.+) (.+) (.+)/ then
         server.close
         raise MemCacheError, "unexpected response #{keyline.inspect}"
       end
+
       key, data_length = $1, $3
       values[$1] = socket.read data_length.to_i
       socket.read(2) # "\r\n"
     end
 
-    return values
+    server.close
+    raise MemCacheError, "lost connection to #{server.host}:#{server.port}"
   end
 
   ##
@@ -591,9 +600,9 @@ class MemCache
     @mutex.unlock
   end
 
-  def threadsafe_cache_get_multi(socket, cache_key) # :nodoc:
+  def threadsafe_cache_get_multi(socket, cache_keys) # :nodoc:
     @mutex.lock
-    cache_get_multi socket, cache_key
+    cache_get_multi socket, cache_keys
   ensure
     @mutex.unlock
   end

@@ -38,11 +38,13 @@ end
 
 class FakeServer
 
-  attr_reader :socket
+  attr_reader :host, :port, :socket
 
   def initialize(socket = nil)
-    @socket = socket || FakeSocket.new
     @closed = false
+    @host = 'example.com'
+    @port = 11211
+    @socket = socket || FakeSocket.new
   end
 
   def close
@@ -69,6 +71,17 @@ class TestMemCache < Test::Unit::TestCase
 
     assert_equal "get my_namespace:key\r\n",
                  server.socket.written.string
+  end
+
+  def test_cache_get_EOF
+    server = util_setup_fake_server
+    server.socket.data.string = ''
+
+    e = assert_raise MemCache::MemCacheError do
+      @cache.cache_get server, 'my_namespace:key'
+    end
+
+    assert_equal "lost connection to example.com:11211", e.message
   end
 
   def test_cache_get_bad_state
@@ -103,6 +116,33 @@ class TestMemCache < Test::Unit::TestCase
                  socket.written.string
   end
 
+  def test_cache_get_multi
+    server = util_setup_fake_server
+    server.socket.data.write "VALUE foo 0 7\r\n"
+    server.socket.data.write "\004\b\"\bfoo\r\n"
+    server.socket.data.write "VALUE bar 0 7\r\n"
+    server.socket.data.write "\004\b\"\bbar\r\n"
+    server.socket.data.write "END\r\n"
+    server.socket.data.rewind
+
+    result = @cache.cache_get_multi server, 'foo bar baz'
+
+    assert_equal 2, result.length
+    assert_equal "\004\b\"\bfoo", result['foo']
+    assert_equal "\004\b\"\bbar", result['bar']
+  end
+
+  def test_cache_get_multi_EOF
+    server = util_setup_fake_server
+    server.socket.data.string = ''
+
+    e = assert_raise MemCache::MemCacheError do
+      @cache.cache_get_multi server, 'my_namespace:key'
+    end
+
+    assert_equal "lost connection to example.com:11211", e.message
+  end
+
   def test_cache_get_multi_bad_state
     server = FakeServer.new
     server.socket.data.write "bogus response\r\n"
@@ -112,7 +152,7 @@ class TestMemCache < Test::Unit::TestCase
     @cache.servers << server
 
     e = assert_raise MemCache::MemCacheError do
-      @cache.cache_get_multi(server, ['my_namespace:key'])
+      @cache.cache_get_multi server, 'my_namespace:key'
     end
 
     assert_equal "unexpected response \"bogus response\\r\\n\"", e.message
