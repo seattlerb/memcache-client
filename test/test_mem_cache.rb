@@ -530,6 +530,68 @@ class TestMemCache < Test::Unit::TestCase
     assert_equal 'object too large for cache', e.message
   end
 
+  def test_add
+    server = FakeServer.new
+    server.socket.data.write "STORED\r\n"
+    server.socket.data.rewind
+    @cache.servers = []
+    @cache.servers << server
+
+    @cache.add 'key', 'value'
+
+    expected = "add my_namespace:key 0 0 9\r\n\004\b\"\nvalue\r\n"
+    assert_equal expected, server.socket.written.string
+  end
+
+  def test_add_exists
+    server = FakeServer.new
+    server.socket.data.write "NOT_STORED\r\n"
+    server.socket.data.rewind
+    @cache.servers = []
+    @cache.servers << server
+
+    @cache.add 'key', 'value'
+
+    expected = "add my_namespace:key 0 0 9\r\n\004\b\"\nvalue\r\n"
+    assert_equal expected, server.socket.written.string
+  end
+
+  def test_add_expiry
+    server = FakeServer.new
+    server.socket.data.write "STORED\r\n"
+    server.socket.data.rewind
+    @cache.servers = []
+    @cache.servers << server
+
+    @cache.add 'key', 'value', 5
+
+    expected = "add my_namespace:key 0 5 9\r\n\004\b\"\nvalue\r\n"
+    assert_equal expected, server.socket.written.string
+  end
+
+  def test_add_raw
+    server = FakeServer.new
+    server.socket.data.write "STORED\r\n"
+    server.socket.data.rewind
+    @cache.servers = []
+    @cache.servers << server
+
+    @cache.add 'key', 'value', 0, true
+
+    expected = "add my_namespace:key 0 0 5\r\nvalue\r\n"
+    assert_equal expected, server.socket.written.string
+  end
+
+  def test_add_readonly
+    cache = MemCache.new :readonly => true
+
+    e = assert_raise MemCache::MemCacheError do
+      cache.add 'key', 'value'
+    end
+
+    assert_equal 'Update of readonly cache', e.message
+  end
+
   def test_stats
     socket = FakeSocket.new
     socket.data.write "STAT pid 20188\r\nSTAT total_items 32\r\rEND\r\n"

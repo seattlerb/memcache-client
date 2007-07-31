@@ -288,6 +288,9 @@ class MemCache
   ##
   # Add +key+ to the cache with value +value+ that expires in +expiry+
   # seconds.  If +raw+ is true, +value+ will not be Marshalled.
+  #
+  # Warning: Readers should not call this method in the event of a cache miss;
+  # see MemCache#add.
 
   def set(key, value, expiry = 0, raw = false)
     raise MemCacheError, "Update of readonly cache" if @readonly
@@ -302,6 +305,34 @@ class MemCache
       socket.write command
       result = socket.gets
       raise MemCacheError, $1.strip if result =~ /^SERVER_ERROR (.*)/
+    rescue SocketError, SystemCallError, IOError => err
+      server.close
+      raise MemCacheError, err.message
+    ensure
+      @mutex.unlock if @multithread
+    end
+  end
+
+  ##
+  # Add +key+ to the cache with value +value+ that expires in +expiry+
+  # seconds, but only if +key+ does not already exist in the cache.
+  # If +raw+ is true, +value+ will not be Marshalled.
+  #
+  # Readers should call this method in the event of a cache miss, not
+  # MemCache#set or MemCache#[]=.
+
+  def add(key, value, expiry = 0, raw = false)
+    raise MemCacheError, "Update of readonly cache" if @readonly
+    server, cache_key = request_setup key
+    socket = server.socket
+
+    value = Marshal.dump value unless raw
+    command = "add #{cache_key} 0 #{expiry} #{value.size}\r\n#{value}\r\n"
+
+    begin
+      @mutex.lock if @multithread
+      socket.write command
+      socket.gets
     rescue SocketError, SystemCallError, IOError => err
       server.close
       raise MemCacheError, err.message

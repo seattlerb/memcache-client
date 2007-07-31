@@ -4,6 +4,7 @@
   Submitted by Ben VandenBos.
 * Fix bug #12450, set TCP_NODELAY socket option.  Patch by Chris
   McGrath.
+* Fix bug #10704, missing #add method.  Patch by Jamie Macey.
 
 = 1.3.0
 
