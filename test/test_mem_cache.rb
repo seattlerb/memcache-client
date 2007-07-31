@@ -9,7 +9,6 @@ require 'memcache'
 
 class MemCache
 
-  attr_reader :servers
   attr_writer :namespace
 
 end
@@ -438,6 +437,13 @@ class TestMemCache < Test::Unit::TestCase
     assert_equal 'my_namespace:key', @cache.make_cache_key('key')
     @cache.namespace = nil
     assert_equal 'key', @cache.make_cache_key('key')
+  end
+
+  def test_servers
+    server = FakeServer.new
+    @cache.servers = []
+    @cache.servers << server
+    assert_equal [server], @cache.servers
   end
 
   def test_servers_equals_type_error

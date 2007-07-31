@@ -81,6 +81,11 @@ class MemCache
   attr_reader :multithread
 
   ##
+  # The servers this client talks to.  Play at your own peril.
+
+  attr_reader :servers
+
+  ##
   # Accepts a list of +servers+ and a list of +opts+.  +servers+ may be
   # omitted.  See +servers=+ for acceptable server list arguments.
   #
@@ -667,6 +672,9 @@ class MemCache
       begin
         @sock = timeout CONNECT_TIMEOUT do
           TCPSocket.new @host, @port
+        end
+        if Socket.constants.include? 'TCP_NODELAY' then
+          @sock.setsockopt Socket::IPPROTO_TCP, Socket::TCP_NODELAY, 1
         end
         @retry  = nil
         @status = 'CONNECTED'

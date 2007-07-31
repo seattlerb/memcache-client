@@ -2,6 +2,8 @@
 
 * Fix bug #10371, #set does not check response for server errors.
   Submitted by Ben VandenBos.
+* Fix bug #12450, set TCP_NODELAY socket option.  Patch by Chris
+  McGrath.
 
 = 1.3.0
 
