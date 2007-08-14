@@ -507,19 +507,6 @@ class TestMemCache < Test::Unit::TestCase
     assert_equal expected, server.socket.written.string
   end
 
-  def test_set
-    server = FakeServer.new
-    server.socket.data.write "STORED\r\n"
-    server.socket.data.rewind
-    @cache.servers = []
-    @cache.servers << server
-
-    @cache.set 'key', 'value'
-
-    expected = "set my_namespace:key 0 0 9\r\n\004\b\"\nvalue\r\n"
-    assert_equal expected, server.socket.written.string
-  end
-
   def test_set_expiry
     server = FakeServer.new
     server.socket.data.write "STORED\r\n"
@@ -630,6 +617,58 @@ class TestMemCache < Test::Unit::TestCase
     end
 
     assert_equal 'Update of readonly cache', e.message
+  end
+
+  def test_delete
+    server = FakeServer.new
+    @cache.servers = []
+    @cache.servers << server
+    
+    @cache.delete 'key'
+    
+    expected = "delete my_namespace:key 0\r\n"
+    assert_equal expected, server.socket.written.string
+  end
+
+  def test_delete_with_expiry
+    server = FakeServer.new
+    @cache.servers = []
+    @cache.servers << server
+    
+    @cache.delete 'key', 300
+    
+    expected = "delete my_namespace:key 300\r\n"
+    assert_equal expected, server.socket.written.string
+  end
+
+  def test_flush_all
+    @cache.servers = []
+    3.times { @cache.servers << FakeServer.new }
+
+    @cache.flush_all
+
+    expected = "flush_all\r\n"
+    @cache.servers.each do |server|
+      assert_equal expected, server.socket.written.string
+    end
+  end
+
+  def test_flush_all_failure
+    socket = FakeSocket.new
+    socket.data.write "ERROR\r\n"
+    socket.data.rewind
+    server = FakeServer.new socket
+    def server.host() "localhost"; end
+    def server.port() 11211; end
+
+    @cache.servers = []
+    @cache.servers << server
+
+    assert_raise MemCache::MemCacheError do
+      @cache.flush_all
+    end
+
+    assert_equal "flush_all\r\n", socket.written.string
   end
 
   def test_stats

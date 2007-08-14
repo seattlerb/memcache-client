@@ -366,6 +366,31 @@ class MemCache
   end
 
   ##
+  # Flush the cache from all memcache servers.
+
+  def flush_all
+    raise MemCacheError, 'No active servers' unless active?
+    raise MemCacheError, "Update of readonly cache" if @readonly
+    begin
+      @mutex.lock if @multithread
+      @servers.each do |server|
+        begin
+          sock = server.socket
+          raise MemCacheError, "No connection to server" if sock.nil?
+          sock.write "flush_all\r\n"
+          result = sock.gets
+          raise MemCacheError, $2.strip if result =~ /^(SERVER_)?ERROR(.*)/
+        rescue SocketError, SystemCallError, IOError => err
+          server.close
+          raise MemCacheError, err.message
+        end
+      end
+    ensure
+      @mutex.unlock if @multithread
+    end
+  end
+
+  ##
   # Reset the connection to all memcache servers.  This should be called if
   # there is a problem with a cache lookup that might have left the connection
   # in a corrupted state.
