@@ -409,26 +409,26 @@ class MemCache
   #
   #   >> pp CACHE.stats
   #   {"localhost:11211"=>
-  #     {"bytes"=>"4718",
-  #      "pid"=>"20188",
-  #      "connection_structures"=>"4",
-  #      "time"=>"1162278121",
-  #      "pointer_size"=>"32",
-  #      "limit_maxbytes"=>"67108864",
-  #      "cmd_get"=>"14532",
+  #     {"bytes"=>4718,
+  #      "pid"=>20188,
+  #      "connection_structures"=>4,
+  #      "time"=>1162278121,
+  #      "pointer_size"=>32,
+  #      "limit_maxbytes"=>67108864,
+  #      "cmd_get"=>14532,
   #      "version"=>"1.2.0",
-  #      "bytes_written"=>"432583",
-  #      "cmd_set"=>"32",
-  #      "get_misses"=>"0",
-  #      "total_connections"=>"19",
-  #      "curr_connections"=>"3",
-  #      "curr_items"=>"4",
-  #      "uptime"=>"1557",
-  #      "get_hits"=>"14532",
-  #      "total_items"=>"32",
-  #      "rusage_system"=>"0.313952",
-  #      "rusage_user"=>"0.119981",
-  #      "bytes_read"=>"190619"}}
+  #      "bytes_written"=>432583,
+  #      "cmd_set"=>32,
+  #      "get_misses"=>0,
+  #      "total_connections"=>19,
+  #      "curr_connections"=>3,
+  #      "curr_items"=>4,
+  #      "uptime"=>1557,
+  #      "get_hits"=>14532,
+  #      "total_items"=>32,
+  #      "rusage_system"=>0.313952,
+  #      "rusage_user"=>0.119981,
+  #      "bytes_read"=>190619}}
   #   => nil
 
   def stats
@@ -443,12 +443,27 @@ class MemCache
       begin
         sock.write "stats\r\n"
         stats = {}
-        while line = sock.gets
+        while line = sock.gets do
           break if line == "END\r\n"
-          line =~ /^STAT ([\w]+) ([\d.]+)/
-          stats[$1] = $2
+          if line =~ /^STAT ([\w]+) ([\w\.\:]+)/ then
+            name, value = $1, $2
+            stats[name] = case name
+                          when 'version'
+                            value
+                          when 'rusage_user', 'rusage_system' then
+                            seconds, microseconds = value.split(/:/, 2)
+                            microseconds ||= 0
+                            Float(seconds) + (Float(microseconds) / 1_000_000)
+                          else
+                            if value =~ /^\d+$/ then
+                              value.to_i
+                            else
+                              value
+                            end
+                          end
+          end
         end
-        server_stats["#{server.host}:#{server.port}"] = stats.clone
+        server_stats["#{server.host}:#{server.port}"] = stats
       rescue SocketError, SystemCallError, IOError => err
         server.close
         raise MemCacheError, err.message

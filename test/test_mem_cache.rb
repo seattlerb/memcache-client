@@ -673,16 +673,21 @@ class TestMemCache < Test::Unit::TestCase
 
   def test_stats
     socket = FakeSocket.new
-    socket.data.write "STAT pid 20188\r\nSTAT total_items 32\r\rEND\r\n"
+    socket.data.write "STAT pid 20188\r\nSTAT total_items 32\r\nSTAT version 1.2.3\r\nSTAT rusage_user 1:300\r\nSTAT dummy ok\r\nEND\r\n"
     socket.data.rewind
     server = FakeServer.new socket
-    def server.host() "localhost"; end
+    def server.host() 'localhost'; end
     def server.port() 11211; end
 
     @cache.servers = []
     @cache.servers << server
 
-    expected = {"localhost:11211"=>{"pid"=>"20188", "total_items"=>"32"}}
+    expected = {
+      'localhost:11211' => {
+        'pid' => 20188, 'total_items' => 32, 'version' => '1.2.3',
+        'rusage_user' => 1.0003, 'dummy' => 'ok'
+      }
+    }
     assert_equal expected, @cache.stats
 
     assert_equal "stats\r\n", socket.written.string
