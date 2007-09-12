@@ -17,14 +17,14 @@ module Cache
     start_time = Time.now
     value = CACHE.get key
     elapsed = Time.now - start_time
-    ActiveRecord::Base.logger.debug('MemCache Get (%0.6f)  %s' % [elapsed, key])
+    debug('MemCache Get (%0.6f)  %s' % [elapsed, key])
     if value.nil? and block_given? then
       value = yield
       add key, value, expiry
     end
     value
   rescue MemCache::MemCacheError => err
-    ActiveRecord::Base.logger.debug "MemCache Error: #{err.message}"
+    debug "MemCache Error: #{err.message}"
     if block_given? then
       value = yield
       put key, value, expiry
@@ -40,11 +40,10 @@ module Cache
     start_time = Time.now
     CACHE.set key, value, expiry
     elapsed = Time.now - start_time
-    ActiveRecord::Base.logger.debug('MemCache Set (%0.6f)  %s' % [elapsed, key])
+    debug('MemCache Set (%0.6f)  %s' % [elapsed, key])
     value
   rescue MemCache::MemCacheError => err
-    ActiveRecord::Base.logger.debug "MemCache Error: #{err.message}"
-    nil
+    debug "MemCache Error: #{err.message}"
   end
 
   ##
@@ -55,11 +54,10 @@ module Cache
     start_time = Time.now
     response = CACHE.add key, value, expiry
     elapsed = Time.now - start_time
-    ActiveRecord::Base.logger.debug('MemCache Add (%0.6f)  %s' % [elapsed, key])
+    debug('MemCache Add (%0.6f)  %s' % [elapsed, key])
     (response == "STORED\r\n") ? value : nil
   rescue MemCache::MemCacheError => err
-    ActiveRecord::Base.logger.debug "MemCache Error: #{err.message}"
-    nil
+    debug "MemCache Error: #{err.message}"
   end
 
   ##
@@ -69,12 +67,9 @@ module Cache
     start_time = Time.now
     CACHE.delete key, delay
     elapsed = Time.now - start_time
-    ActiveRecord::Base.logger.debug('MemCache Delete (%0.6f)  %s' %
-                                    [elapsed, key])
-    nil
+    debug('MemCache Delete (%0.6f)  %s' % [elapsed, key])
   rescue MemCache::MemCacheError => err
-    ActiveRecord::Base.logger.debug "MemCache Error: #{err.message}"
-    nil
+    debug "MemCache Error: #{err.message}"
   end
 
   ##
@@ -82,7 +77,12 @@ module Cache
 
   def self.reset
     CACHE.reset
-    ActiveRecord::Base.logger.debug 'MemCache Connections Reset'
+    debug 'MemCache Connections Reset'
+  end
+
+  def self.debug(message)
+    return nil unless defined? ActiveRecord
+    ActiveRecord::Base.logger.debug message
     nil
   end
 
